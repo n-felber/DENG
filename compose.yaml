@@ -20,6 +20,7 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg://deng:deng_dev_password@db:5432/deng
+      KAGGLE_API_TOKEN: ${KAGGLE_API_TOKEN:-}
 
 volumes:
   pgdata:
