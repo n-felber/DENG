@@ -11,21 +11,60 @@ Make sure these are installed:
 
 This project uses a public Kaggle dataset. In some environments, the dataset download may work without explicit authentication.
 
-If Kaggle requires authentication, provide your token locally before starting the project.
+## Kaggle API Token
 
-### Option 1: export the token in your shell
+This project downloads a dataset from Kaggle.  
+To access the dataset, you need a personal Kaggle API token.
 
-```bash
-export KAGGLE_API_TOKEN='your_real_token_here'
-````
+### Step 1 – Create a Kaggle account
 
-### Option 2: create a local `.env` file
+1. Go to https://www.kaggle.com
+2. Create an account or log in
 
-```env
-KAGGLE_API_TOKEN=your_real_token_here
+### Step 2 – Open the account settings
+
+1. Open https://www.kaggle.com/settings
+2. Scroll to the **API** section
+
+### Step 3 – Create a new token
+
+1. Click **Create New Token**
+
+### Step 4 – Define a name for the token
+
+1. Enter a name for your token
+2. Confirm the creation
+
+### Step 5 – Copy the token
+
+After creating the token, Kaggle will show it once in a popup.  
+Copy the token directly from there.
+
+---
+
+### Step 6 – Create a `.env` file
+
+1. Copy the file `.env.example` in the project
+2. Rename the copy to:
+
+```
+.env
 ```
 
-Do not commit this file.
+3. Open `.env`
+4. Paste your token:
+
+```env
+KAGGLE_API_TOKEN=your_token_here
+```
+
+---
+
+**Important:**  
+The token is only shown once. If you do not copy it, you will need to create a new one.
+
+The `.env` file contains sensitive credentials and must **not be committed** to GitHub.
+
 
 ## Project setup
 

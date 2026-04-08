@@ -5,6 +5,8 @@ services:
       POSTGRES_DB: deng
       POSTGRES_USER: deng
       POSTGRES_PASSWORD: deng_dev_password
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:
@@ -12,6 +14,35 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+
+  kestra:
+    image: kestra/kestra:latest
+    command: server standalone
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./kestra/flows:/app/flows
+    environment:
+      KESTRA_CONFIGURATION: |
+        kestra:
+          repository:
+            type: memory
+          storage:
+            type: local
+            local:
+              base-path: /tmp/kestra/storage
+          queue:
+            type: memory
 
   app:
     build: .

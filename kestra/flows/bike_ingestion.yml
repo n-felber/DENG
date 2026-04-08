@@ -1,0 +1,11 @@
+id: bike_ingestion_pipeline
+namespace: deng
+
+description: |
+  Runs the bike sharing batch ingestion pipeline and loads data into PostgreSQL.
+
+tasks:
+  - id: run_pipeline
+    type: io.kestra.plugin.scripts.shell.Commands
+    commands:
+      - python src/main.py

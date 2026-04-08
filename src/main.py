@@ -233,6 +233,42 @@ def verify_table_row_count(engine: Engine, table_name: str) -> None:
 
     logger.info("Verification for '%s': %s rows present.", table_name, row_count)
 
+def transform_bike_day(engine: Engine) -> None:
+    """
+    Create an analytics-ready version of the daily bike dataset.
+    """
+
+    logger.info("Starting transformation for bike_day...")
+
+    query = """
+    CREATE TABLE bike_day_analytics AS
+    SELECT
+        *,
+        CASE 
+            WHEN weekday IN (0,6) THEN TRUE
+            ELSE FALSE
+        END AS is_weekend,
+
+        cnt AS total_rentals,
+
+        CASE 
+            WHEN cnt = 0 THEN 0
+            ELSE casual::float / cnt
+        END AS casual_share,
+
+        CASE 
+            WHEN cnt = 0 THEN 0
+            ELSE registered::float / cnt
+        END AS registered_share
+
+    FROM bike_day_raw;
+    """
+
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS bike_day_analytics"))
+        conn.execute(text(query))
+
+    logger.info("Finished transformation for bike_day.")
 
 def run_batch_ingestion() -> None:
     """
@@ -257,6 +293,8 @@ def run_batch_ingestion() -> None:
         log_dataframe_overview(table_name, df)
         load_dataframe_to_postgres(engine, df, table_name)
         verify_table_row_count(engine, table_name)
+        
+    transform_bike_day(engine)
 
     logger.info("--- Batch ingestion pipeline finished successfully ---")
 
