@@ -268,7 +268,14 @@ def transform_bike_day(engine: Engine) -> None:
         conn.execute(text("DROP TABLE IF EXISTS bike_day_analytics"))
         conn.execute(text(query))
 
+    with engine.connect() as conn:
+        row_count = conn.execute(
+            text("SELECT COUNT(*) FROM bike_day_analytics")
+        ).scalar_one()
+
     logger.info("Finished transformation for bike_day.")
+    logger.info("Verification for 'bike_day_analytics': %s rows present.", row_count)
+
 
 def run_batch_ingestion() -> None:
     """
