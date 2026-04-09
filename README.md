@@ -16,6 +16,7 @@ It includes:
 - Ingestion pipeline: [docs/ingestion.md](docs/ingestion.md)
 - Setup: [docs/setup.md](docs/setup.md)
 - Cleanup: [docs/cleanup.md](docs/cleanup.md)
+- Verification screenshots: [`images/`](images/)
 
 ## Run the project
 
@@ -58,6 +59,10 @@ This starts:
 
 All services run inside the same Docker Compose network and can communicate using their service names, such as `db`.
 
+The Docker Compose setup is the reproducible local environment for this project.
+Another reviewer should be able to clone the repository, provide a Kaggle token if required,
+run `docker compose up --build`, and verify the system using the checks below.
+
 ## Expected behavior
 
 The `app` service runs the batch ingestion pipeline once.
@@ -96,6 +101,11 @@ Expected result:
 * `kestra` is `Up`
 * `app` is `Exited (0)`
 
+Example verification screenshot:
+
+![docker compose ps -a](images/docker-compose-ps-a.png)
+
+
 If `app` exits with a non-zero code, the pipeline failed.
 
 ### 2. Check pipeline logs
@@ -110,6 +120,10 @@ Expected result:
 * both raw tables loaded
 * transformed table created
 * final success message
+
+Example verification screenshot:
+
+![docker compose logs app](images/docker-compose-logs-app.png)
 
 ### 3. Check PostgreSQL tables
 
@@ -197,3 +211,19 @@ Expected result:
 
 The file `.env.example` is included as a template for local Kaggle API token setup.
 
+## Reproducibility summary
+
+This repository contains all components required to reproduce the local environment:
+
+* application source code
+* Docker Compose configuration
+* Dockerfile
+* Kestra flow definition
+* setup and verification documentation
+
+To reproduce the environment independently:
+
+1. clone the repository
+2. create `.env` from `.env.example` if Kaggle authentication is required
+3. run `docker compose up --build`
+4. verify the services and database state using the commands and screenshots above
