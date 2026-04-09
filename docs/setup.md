@@ -51,7 +51,7 @@ Copy the token directly.
 KAGGLE_API_TOKEN=your_token_here
 ```
 
-**Important:**
+**Important:**  
 The token is only shown once. If you do not copy it, you will need to create a new one.
 
 The `.env` file contains sensitive credentials and must **not be committed** to GitHub.
@@ -66,12 +66,12 @@ docker compose up --build
 
 Expected result:
 
-* Docker builds the `app` image
-* The `db` container starts and becomes healthy
-* The `pgadmin` container starts
-* The `kestra` container starts
-* The `app` container runs the ingestion pipeline once
-* If the pipeline succeeds, the `app` container exits with status code `0`
+- Docker builds the `app` image
+- The `db` container starts and becomes healthy
+- The `pgadmin` container starts
+- The `kestra` container starts
+- The `app` container runs the ingestion and transformation pipeline once
+- If the pipeline succeeds, the `app` container exits with status code `0`
 
 ## Verify that the local database works
 
@@ -85,10 +85,10 @@ docker compose ps -a
 
 Expected result:
 
-* `db` is `Up` and healthy
-* `pgadmin` is `Up`
-* `kestra` is `Up`
-* `app` is `Exited (0)`
+- `db` is `Up` and healthy
+- `pgadmin` is `Up`
+- `kestra` is `Up`
+- `app` is `Exited (0)`
 
 A successful output should look similar to this:
 
@@ -112,19 +112,39 @@ Expected result:
 
 The following tables should exist:
 
-* `bike_hour_raw`
-* `bike_day_raw`
-* `bike_day_analytics`
+Raw tables:
+
+- `bike_hour_raw`
+- `bike_day_raw`
+
+Analytics tables:
+
+- `bike_hour_analytics`
+- `bike_day_analytics`
+
+Summary tables:
+
+- `bike_hourly_demand_summary`
+- `bike_weekday_weekend_summary`
+- `bike_weather_demand_summary`
+- `bike_daily_trend_summary`
+- `bike_monthly_trend_summary`
 
 A successful output should look similar to this:
 
 ```text
-               List of relations
- Schema |        Name         | Type  | Owner
---------+---------------------+-------+-------
- public | bike_day_analytics  | table | deng
- public | bike_day_raw        | table | deng
- public | bike_hour_raw       | table | deng
+                    List of relations
+ Schema |             Name              | Type  | Owner
+--------+-------------------------------+-------+-------
+ public | bike_daily_trend_summary      | table | deng
+ public | bike_day_analytics            | table | deng
+ public | bike_day_raw                  | table | deng
+ public | bike_hour_analytics           | table | deng
+ public | bike_hour_raw                 | table | deng
+ public | bike_hourly_demand_summary    | table | deng
+ public | bike_monthly_trend_summary    | table | deng
+ public | bike_weather_demand_summary   | table | deng
+ public | bike_weekday_weekend_summary  | table | deng
 ```
 
 ### Check row counts
@@ -132,16 +152,26 @@ A successful output should look similar to this:
 ```bash
 docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hour_raw;"
 docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_day_raw;"
+docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hour_analytics;"
 docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_day_analytics;"
+docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hourly_demand_summary;"
+docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_weekday_weekend_summary;"
+docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_daily_trend_summary;"
+docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_monthly_trend_summary;"
 ```
 
 Expected result:
 
-* `bike_hour_raw` contains `17379` rows
-* `bike_day_raw` contains `731` rows
-* `bike_day_analytics` contains `731` rows
+- `bike_hour_raw` contains `17379` rows
+- `bike_day_raw` contains `731` rows
+- `bike_hour_analytics` contains `17379` rows
+- `bike_day_analytics` contains `731` rows
+- `bike_hourly_demand_summary` contains `24` rows
+- `bike_weekday_weekend_summary` contains `2` rows
+- `bike_daily_trend_summary` contains `731` rows
+- `bike_monthly_trend_summary` contains `24` rows
 
-Example successful outputs:
+Example successful output:
 
 ```text
  count
@@ -150,20 +180,12 @@ Example successful outputs:
 (1 row)
 ```
 
-```text
- count
--------
-   731
-(1 row)
-```
+For the weather summary table, the exact row count depends on how many weather categories are present in the dataset.  
+You can inspect it with:
 
-```text
- count
--------
-   731
-(1 row)
+```bash
+docker compose exec db psql -U deng -d deng -c "SELECT * FROM bike_weather_demand_summary ORDER BY weather_situation;"
 ```
-
 
 ### Open pgAdmin
 
@@ -171,12 +193,12 @@ Open in your browser:
 
 ```text
 http://localhost:5050
-````
+```
 
 Log in with:
 
-* Email: `admin@local.dev`
-* Password: `admin`
+- Email: `admin@local.dev`
+- Password: `admin`
 
 ### Add the PostgreSQL server in pgAdmin
 
@@ -192,21 +214,21 @@ A window with multiple tabs will open.
 
 Fill in:
 
-* **Name**: `deng`
+- **Name**: `deng`
 
 #### Connection tab
 
 Fill in:
 
-* **Host name/address**: `db`
-* **Port**: `5432`
-* **Maintenance database**: `deng`
-* **Username**: `deng`
-* **Password**: `deng_dev_password`
+- **Host name/address**: `db`
+- **Port**: `5432`
+- **Maintenance database**: `deng`
+- **Username**: `deng`
+- **Password**: `deng_dev_password`
 
 Optional but recommended:
 
-* Enable **Save password**
+- Enable **Save password**
 
 Then:
 
@@ -228,10 +250,15 @@ Expand the items in this order:
 
 Inside **Tables**, you should see:
 
-* `bike_day_analytics`
-* `bike_day_raw`
-* `bike_hour_raw`
-
+- `bike_hour_raw`
+- `bike_day_raw`
+- `bike_hour_analytics`
+- `bike_day_analytics`
+- `bike_hourly_demand_summary`
+- `bike_weekday_weekend_summary`
+- `bike_weather_demand_summary`
+- `bike_daily_trend_summary`
+- `bike_monthly_trend_summary`
 
 ### Optional: Open Kestra
 
@@ -243,5 +270,5 @@ http://localhost:8081
 
 Expected result:
 
-* the Kestra UI opens in the browser
-* the Kestra service is reachable
+- the Kestra UI opens in the browser
+- the Kestra service is reachable

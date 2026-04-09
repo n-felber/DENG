@@ -233,6 +233,7 @@ def verify_table_row_count(engine: Engine, table_name: str) -> None:
 
     logger.info("Verification for '%s': %s rows present.", table_name, row_count)
 
+
 def transform_bike_day(engine: Engine) -> None:
     """
     Create an analytics-ready version of the daily bike dataset.
@@ -244,19 +245,37 @@ def transform_bike_day(engine: Engine) -> None:
     CREATE TABLE bike_day_analytics AS
     SELECT
         *,
-        CASE 
-            WHEN weekday IN (0,6) THEN TRUE
+        dteday::date AS event_date,
+        2011 + yr AS year,
+        mnth AS month,
+        TO_CHAR(dteday::date, 'FMDay') AS day_name,
+        TO_CHAR(dteday::date, 'FMMonth') AS month_name,
+
+        CASE
+            WHEN weekday IN (0, 6) THEN TRUE
             ELSE FALSE
         END AS is_weekend,
 
+        weathersit AS weather_situation,
+
+        CASE
+            WHEN weathersit = 1 THEN 'Clear/Partly cloudy'
+            WHEN weathersit = 2 THEN 'Mist/Cloudy'
+            WHEN weathersit = 3 THEN 'Light rain/snow'
+            WHEN weathersit = 4 THEN 'Heavy rain/snow'
+            ELSE 'Unknown'
+        END AS weather_situation_label,
+
+        hum AS humidity,
+
         cnt AS total_rentals,
 
-        CASE 
+        CASE
             WHEN cnt = 0 THEN 0
             ELSE casual::float / cnt
         END AS casual_share,
 
-        CASE 
+        CASE
             WHEN cnt = 0 THEN 0
             ELSE registered::float / cnt
         END AS registered_share
@@ -268,13 +287,155 @@ def transform_bike_day(engine: Engine) -> None:
         conn.execute(text("DROP TABLE IF EXISTS bike_day_analytics"))
         conn.execute(text(query))
 
-    with engine.connect() as conn:
-        row_count = conn.execute(
-            text("SELECT COUNT(*) FROM bike_day_analytics")
-        ).scalar_one()
-
     logger.info("Finished transformation for bike_day.")
-    logger.info("Verification for 'bike_day_analytics': %s rows present.", row_count)
+    verify_table_row_count(engine, "bike_day_analytics")
+
+
+def transform_bike_hour(engine: Engine) -> None:
+    """
+    Create an analytics-ready version of the hourly bike dataset.
+    """
+
+    logger.info("Starting transformation for bike_hour...")
+
+    query = """
+    CREATE TABLE bike_hour_analytics AS
+    SELECT
+        *,
+        dteday::date AS event_date,
+        dteday::timestamp + (hr * INTERVAL '1 hour') AS event_timestamp,
+        2011 + yr AS year,
+        mnth AS month,
+        hr AS hour_of_day,
+        TO_CHAR(dteday::date, 'FMDay') AS day_name,
+        TO_CHAR(dteday::date, 'FMMonth') AS month_name,
+
+        CASE
+            WHEN weekday IN (0, 6) THEN TRUE
+            ELSE FALSE
+        END AS is_weekend,
+
+        weathersit AS weather_situation,
+
+        CASE
+            WHEN weathersit = 1 THEN 'Clear/Partly cloudy'
+            WHEN weathersit = 2 THEN 'Mist/Cloudy'
+            WHEN weathersit = 3 THEN 'Light rain/snow'
+            WHEN weathersit = 4 THEN 'Heavy rain/snow'
+            ELSE 'Unknown'
+        END AS weather_situation_label,
+
+        hum AS humidity,
+
+        cnt AS total_rentals,
+
+        CASE
+            WHEN cnt = 0 THEN 0
+            ELSE casual::float / cnt
+        END AS casual_share,
+
+        CASE
+            WHEN cnt = 0 THEN 0
+            ELSE registered::float / cnt
+        END AS registered_share
+
+    FROM bike_hour_raw;
+    """
+
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS bike_hour_analytics"))
+        conn.execute(text(query))
+
+    logger.info("Finished transformation for bike_hour.")
+    verify_table_row_count(engine, "bike_hour_analytics")
+
+
+def create_summary_tables(engine: Engine) -> None:
+    """
+    Create aggregated summary tables for recurring analytics questions.
+    """
+
+    logger.info("Starting creation of summary tables...")
+
+    summary_queries = {
+        "bike_hourly_demand_summary": """
+            CREATE TABLE bike_hourly_demand_summary AS
+            SELECT
+                hour_of_day,
+                AVG(total_rentals) AS avg_total_rentals,
+                SUM(total_rentals) AS total_rentals,
+                COUNT(*) AS record_count
+            FROM bike_hour_analytics
+            GROUP BY hour_of_day
+            ORDER BY hour_of_day;
+        """,
+        "bike_weekday_weekend_summary": """
+            CREATE TABLE bike_weekday_weekend_summary AS
+            SELECT
+                is_weekend,
+                CASE
+                    WHEN is_weekend THEN 'weekend'
+                    ELSE 'weekday'
+                END AS day_type,
+                AVG(total_rentals) AS avg_total_rentals,
+                SUM(total_rentals) AS total_rentals,
+                COUNT(*) AS record_count
+            FROM bike_day_analytics
+            GROUP BY is_weekend
+            ORDER BY is_weekend;
+        """,
+        "bike_weather_demand_summary": """
+            CREATE TABLE bike_weather_demand_summary AS
+            SELECT
+                weather_situation,
+                weather_situation_label,
+                AVG(total_rentals) AS avg_total_rentals,
+                SUM(total_rentals) AS total_rentals,
+                COUNT(*) AS record_count
+            FROM bike_day_analytics
+            GROUP BY weather_situation, weather_situation_label
+            ORDER BY weather_situation;
+        """,
+        "bike_daily_trend_summary": """
+            CREATE TABLE bike_daily_trend_summary AS
+            SELECT
+                event_date,
+                day_name,
+                month,
+                month_name,
+                year,
+                total_rentals,
+                casual,
+                registered
+            FROM bike_day_analytics
+            ORDER BY event_date;
+        """,
+        "bike_monthly_trend_summary": """
+            CREATE TABLE bike_monthly_trend_summary AS
+            SELECT
+                year,
+                month,
+                month_name,
+                SUM(total_rentals) AS total_rentals,
+                AVG(total_rentals) AS avg_daily_rentals,
+                SUM(casual) AS casual_rentals,
+                SUM(registered) AS registered_rentals,
+                COUNT(*) AS day_count
+            FROM bike_day_analytics
+            GROUP BY year, month, month_name
+            ORDER BY year, month;
+        """,
+    }
+
+    with engine.begin() as conn:
+        for table_name, query in summary_queries.items():
+            conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+            conn.execute(text(query))
+
+    for table_name in summary_queries:
+        verify_table_row_count(engine, table_name)
+
+    logger.info("Finished creation of summary tables.")
 
 
 def run_batch_ingestion() -> None:
@@ -287,6 +448,7 @@ def run_batch_ingestion() -> None:
     3. Download each source file from Kaggle
     4. Load raw tables into PostgreSQL
     5. Verify row counts
+    6. Create transformed analytics tables and summaries
     """
     logger.info("--- Starting batch ingestion pipeline ---")
 
@@ -300,8 +462,10 @@ def run_batch_ingestion() -> None:
         log_dataframe_overview(table_name, df)
         load_dataframe_to_postgres(engine, df, table_name)
         verify_table_row_count(engine, table_name)
-        
+
     transform_bike_day(engine)
+    transform_bike_hour(engine)
+    create_summary_tables(engine)
 
     logger.info("--- Batch ingestion pipeline finished successfully ---")
 
