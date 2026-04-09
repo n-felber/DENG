@@ -14,6 +14,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    networks:
+      - deng_net
 
   pgadmin:
     image: dpage/pgadmin4
@@ -26,6 +28,8 @@ services:
       - db
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - deng_net
 
   kestra:
     image: kestra/kestra:latest
@@ -45,6 +49,8 @@ services:
               base-path: /tmp/kestra/storage
           queue:
             type: memory
+    networks:
+      - deng_net
 
   app:
     build: .
@@ -54,7 +60,13 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://deng:deng_dev_password@db:5432/deng
       KAGGLE_API_TOKEN: ${KAGGLE_API_TOKEN:-}
+    networks:
+      - deng_net
 
 volumes:
   pgdata:
   pgadmin_data:
+
+networks:
+  deng_net:
+    driver: bridge
