@@ -1,72 +1,47 @@
 services:
-  db:
-    image: postgres:18
+  postgres:
+    image: postgres:15
     environment:
-      POSTGRES_DB: deng
-      POSTGRES_USER: deng
-      POSTGRES_PASSWORD: deng_dev_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
-      retries: 20
-    networks:
-      - deng_net
+      retries: 5
 
-  pgadmin:
-    image: dpage/pgadmin4
+  airflow-common: &airflow-common
+    image: apache/airflow:2.7.1-python3.11
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@local.dev
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    depends_on:
-      - db
+      - DATABASE_URL=${DATABASE_URL}
+      - KAGGLE_API_TOKEN=${KAGGLE_API_TOKEN}
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=${AIRFLOW__CORE__LOAD_EXAMPLES}
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
     volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    networks:
-      - deng_net
-
-  kestra:
-    image: kestra/kestra:latest
-    command: server standalone
-    ports:
-      - "8081:8080"
-    volumes:
-      - ./kestra/flows:/app/flows
-    environment:
-      KESTRA_CONFIGURATION: |
-        kestra:
-          repository:
-            type: memory
-          storage:
-            type: local
-            local:
-              base-path: /tmp/kestra/storage
-          queue:
-            type: memory
-    networks:
-      - deng_net
-
-  app:
-    build: .
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./requirements.txt:/opt/airflow/requirements.txt
+    user: "${AIRFLOW_UID:-50000}:0"
     depends_on:
-      db:
+      postgres:
         condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql+psycopg://deng:deng_dev_password@db:5432/deng
-      KAGGLE_API_TOKEN: ${KAGGLE_API_TOKEN:-}
-    networks:
-      - deng_net
 
-volumes:
-  pgdata:
-  pgadmin_data:
+  airflow-webserver:
+    <<: *airflow-common
+    command: >
+      bash -c "pip install --no-cache-dir -r /opt/airflow/requirements.txt && 
+               airflow db upgrade && 
+               airflow users create --username airflow --password airflow --firstname Admin --lastname Admin --role Admin --email admin@example.com || true &&
+               airflow webserver"
+    ports:
+      - "8080:8080"
 
-networks:
-  deng_net:
-    driver: bridge
+  airflow-scheduler:
+    <<: *airflow-common
+    command: >
+      bash -c "pip install --no-cache-dir -r /opt/airflow/requirements.txt && 
+               airflow db upgrade &&
+               airflow scheduler"
