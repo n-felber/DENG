@@ -5,7 +5,6 @@
 Make sure these are installed:
 
 - [Docker](https://www.docker.com/)
-- [uv](https://github.com/astral-sh/uv)
 
 ## Optional Kaggle authentication
 
@@ -56,59 +55,72 @@ The token is only shown once. If you do not copy it, you will need to create a n
 
 The `.env` file contains sensitive credentials and must **not be committed** to GitHub.
 
-## Project setup
+## Start the system
 
 Start the project with Docker:
 
 ```bash
-docker compose up --build
+docker compose up -d
 ```
 
 Expected result:
 
-- Docker builds the `app` image
-- The `db` container starts and becomes healthy
-- The `pgadmin` container starts
-- The `kestra` container starts
-- The `app` container runs the ingestion and transformation pipeline once
-- If the pipeline succeeds, the `app` container exits with status code `0`
+- the `postgres` container starts and becomes healthy
+- the `pgadmin` container starts
+- the `airflow-webserver` container starts
+- the `airflow-scheduler` container starts
 
-## Verify that the local database works
+## Open Airflow
 
-After the containers are running, verify that PostgreSQL is populated.
+Open in your browser:
+
+```text
+http://localhost:8080
+```
+
+Log in with:
+
+- Username: `airflow`
+- Password: `airflow`
+
+### Expected result
+
+The DAG `bike_sharing_ingestion` is visible in the Airflow UI.
+
+## Run the pipeline
+
+Trigger the DAG once from the Airflow UI, or run:
+
+```bash
+docker compose exec airflow-webserver airflow dags trigger bike_sharing_ingestion
+```
+
+### Expected result
+
+A DAG run starts, and the task `run_batch_ingestion_task` finishes successfully.
+
+## Verify that PostgreSQL is populated
 
 ### Check services
 
 ```bash
-docker compose ps -a
+docker compose ps
 ```
 
 Expected result:
 
-- `db` is `Up` and healthy
+- `postgres` is `Up` and healthy
 - `pgadmin` is `Up`
-- `kestra` is `Up`
-- `app` is `Exited (0)`
+- `airflow-webserver` is `Up`
+- `airflow-scheduler` is `Up`
 
-A successful output should look similar to this:
+### Check project tables in PostgreSQL
 
-```text
-NAME              IMAGE                  COMMAND                  SERVICE    STATUS
-deng-db-1         postgres:18            "docker-entrypoint.s…"   db         Up (healthy)
-deng-pgadmin-1    dpage/pgadmin4         "/entrypoint.sh"         pgadmin    Up
-deng-kestra-1     kestra/kestra:latest   "docker-entrypoint.s…"   kestra     Up
-deng-app-1        deng-app               "python src/main.py"     app        Exited (0)
-```
-
-If `app` exits with a non-zero code, the pipeline failed.
-
-### Check tables in PostgreSQL
+Airflow stores its own metadata tables in the same PostgreSQL database. To inspect only the tables created by this project, run:
 
 ```bash
-docker compose exec db psql -U deng -d deng -c "\dt"
+docker compose exec postgres psql -U deng -d deng -c "\dt public.bike_*"
 ```
-
-Expected result:
 
 The following tables should exist:
 
@@ -130,34 +142,17 @@ Summary tables:
 - `bike_daily_trend_summary`
 - `bike_monthly_trend_summary`
 
-A successful output should look similar to this:
-
-```text
-                    List of relations
- Schema |             Name              | Type  | Owner
---------+-------------------------------+-------+-------
- public | bike_daily_trend_summary      | table | deng
- public | bike_day_analytics            | table | deng
- public | bike_day_raw                  | table | deng
- public | bike_hour_analytics           | table | deng
- public | bike_hour_raw                 | table | deng
- public | bike_hourly_demand_summary    | table | deng
- public | bike_monthly_trend_summary    | table | deng
- public | bike_weather_demand_summary   | table | deng
- public | bike_weekday_weekend_summary  | table | deng
-```
-
 ### Check row counts
 
 ```bash
-docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hour_raw;"
-docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_day_raw;"
-docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hour_analytics;"
-docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_day_analytics;"
-docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hourly_demand_summary;"
-docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_weekday_weekend_summary;"
-docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_daily_trend_summary;"
-docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_monthly_trend_summary;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hour_raw;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_day_raw;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hour_analytics;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_day_analytics;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hourly_demand_summary;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_weekday_weekend_summary;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_daily_trend_summary;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_monthly_trend_summary;"
 ```
 
 Expected result:
@@ -171,23 +166,13 @@ Expected result:
 - `bike_daily_trend_summary` contains `731` rows
 - `bike_monthly_trend_summary` contains `24` rows
 
-Example successful output:
-
-```text
- count
--------
- 17379
-(1 row)
-```
-
-For the weather summary table, the exact row count depends on how many weather categories are present in the dataset.  
-You can inspect it with:
+For the weather summary table, the exact row count depends on how many weather categories are present in the dataset. You can inspect it with:
 
 ```bash
-docker compose exec db psql -U deng -d deng -c "SELECT * FROM bike_weather_demand_summary ORDER BY weather_situation;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT * FROM bike_weather_demand_summary ORDER BY weather_situation;"
 ```
 
-### Open pgAdmin
+## Open pgAdmin
 
 Open in your browser:
 
@@ -200,7 +185,7 @@ Log in with:
 - Email: `admin@local.dev`
 - Password: `admin`
 
-### Add the PostgreSQL server in pgAdmin
+## Add the PostgreSQL server in pgAdmin
 
 After logging in, add the database server manually:
 
@@ -210,17 +195,17 @@ After logging in, add the database server manually:
 
 A window with multiple tabs will open.
 
-#### General tab
+### General tab
 
 Fill in:
 
 - **Name**: `deng`
 
-#### Connection tab
+### Connection tab
 
 Fill in:
 
-- **Host name/address**: `db`
+- **Host name/address**: `postgres`
 - **Port**: `5432`
 - **Maintenance database**: `deng`
 - **Username**: `deng`
@@ -260,15 +245,12 @@ Inside **Tables**, you should see:
 - `bike_daily_trend_summary`
 - `bike_monthly_trend_summary`
 
-### Optional: Open Kestra
+## Verify backfills
 
-Open:
+Airflow supports backfills. Example:
 
-```text
-http://localhost:8081
+```bash
+docker compose exec airflow-webserver airflow dags backfill bike_sharing_ingestion -s 2024-01-01 -e 2024-01-03
 ```
 
-Expected result:
-
-- the Kestra UI opens in the browser
-- the Kestra service is reachable
+A successful backfill creates past DAG runs for the selected date range.

@@ -8,7 +8,7 @@ It includes:
 - a Python batch ingestion pipeline
 - a local PostgreSQL database
 - pgAdmin for database inspection
-- Kestra for workflow orchestration
+- Airflow for workflow orchestration
 
 ## Documentation
 
@@ -16,21 +16,12 @@ It includes:
 - Ingestion pipeline: [docs/ingestion.md](docs/ingestion.md)
 - Setup: [docs/setup.md](docs/setup.md)
 - Cleanup: [docs/cleanup.md](docs/cleanup.md)
-- Verification screenshots: [`images/`](images/)
-
-## Run the project
-
-Continue following the setup instructions in this README, or refer to the detailed setup guide here:
-
-[docs/setup.md](docs/setup.md)
-
 
 ## Prerequisites
 
 Make sure these are installed:
 
 - [Docker](https://www.docker.com/)
-- [uv](https://github.com/astral-sh/uv)
 
 ## Kaggle authentication
 
@@ -44,120 +35,116 @@ KAGGLE_API_TOKEN=your_kaggle_api_token_here
 
 ## Build and run the system
 
-Build and start all services:
+Start all services:
 
 ```bash
-docker compose up --build
+docker compose up -d
 ```
 
 This starts:
 
-* PostgreSQL
-* pgAdmin
-* Kestra
-* the Python ingestion pipeline
+- PostgreSQL
+- pgAdmin
+- Airflow webserver
+- Airflow scheduler
 
-All services run inside the same Docker Compose network and can communicate using their service names, such as `db`.
+All services run inside the same Docker Compose network and can communicate using their service names, such as `postgres`.
 
-The Docker Compose setup is the reproducible local environment for this project.
-Another reviewer should be able to clone the repository, provide a Kaggle token if required,
-run `docker compose up --build`, and verify the system using the checks below.
+## Airflow UI
 
-## Expected behavior
+Open in your browser:
 
-The `app` service runs the batch ingestion pipeline once.
+```text
+http://localhost:8080
+```
 
-A successful run should:
+Log in with:
 
-* download the Bike Sharing dataset source files
-* load `bike_hour_raw` into PostgreSQL
-* load `bike_day_raw` into PostgreSQL
-* create the transformed table `bike_day_analytics`
-* log verification output for the created tables
+- Username: `airflow`
+- Password: `airflow`
 
-Because this is a batch pipeline, the `app` container is expected to exit after it finishes.
-A successful batch run ends with `Exited (0)`.
+The DAG `bike_sharing_ingestion` should be visible in the Airflow UI.
 
-## Service URLs
+To run the pipeline immediately, trigger the DAG once from the Airflow UI or with:
 
-After startup, the following services should be reachable:
-
-* PostgreSQL: `localhost:5432`
-* pgAdmin: `http://localhost:5050`
-* Kestra: `http://localhost:8081`
+```bash
+docker compose exec airflow-webserver airflow dags trigger bike_sharing_ingestion
+```
 
 ## Verify that it works
 
 ### 1. Check container status
 
 ```bash
-docker compose ps -a
+docker compose ps
 ```
 
 Expected result:
 
-* `db` is `Up` and healthy
-* `pgadmin` is `Up`
-* `kestra` is `Up`
-* `app` is `Exited (0)`
+- `postgres` is `Up` and healthy
+- `pgadmin` is `Up`
+- `airflow-webserver` is `Up`
+- `airflow-scheduler` is `Up`
 
-Example verification screenshot:
+### 2. Verify the DAG run in Airflow
 
-![docker compose ps -a](images/docker-compose-ps-a.png)
+In the Airflow UI:
 
-
-If `app` exits with a non-zero code, the pipeline failed.
-
-### 2. Check pipeline logs
-
-```bash
-docker compose logs app
-```
-
-Expected result:
-
-* database connection established
-* both raw tables loaded
-* transformed table created
-* final success message
-
-Example verification screenshot:
-
-![docker compose logs app](images/docker-compose-logs-app.png)
+- confirm that the DAG `bike_sharing_ingestion` exists
+- trigger the DAG once if no recent run is present
+- confirm that the task `run_batch_ingestion_task` finishes successfully
 
 ### 3. Check PostgreSQL tables
 
+Airflow stores its own metadata tables in the same PostgreSQL database. To inspect only the project tables, run:
+
 ```bash
-docker compose exec db psql -U deng -d deng -c "\dt"
+docker compose exec postgres psql -U deng -d deng -c "\dt public.bike_*"
 ```
 
 Expected tables:
 
-* `bike_hour_raw`
-* `bike_day_raw`
-* `bike_day_analytics`
+- `bike_hour_raw`
+- `bike_day_raw`
+- `bike_hour_analytics`
+- `bike_day_analytics`
+- `bike_hourly_demand_summary`
+- `bike_weekday_weekend_summary`
+- `bike_weather_demand_summary`
+- `bike_daily_trend_summary`
+- `bike_monthly_trend_summary`
 
 ### 4. Check row counts
 
 ```bash
-docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hour_raw;"
-docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_day_raw;"
-docker compose exec db psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_day_analytics;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hour_raw;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_day_raw;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hour_analytics;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_day_analytics;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hourly_demand_summary;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_weekday_weekend_summary;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_daily_trend_summary;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_monthly_trend_summary;"
 ```
 
 Expected result:
 
-* `bike_hour_raw` contains `17379` rows
-* `bike_day_raw` contains `731` rows
-* `bike_day_analytics` contains `731` rows
+- `bike_hour_raw` contains `17379` rows
+- `bike_day_raw` contains `731` rows
+- `bike_hour_analytics` contains `17379` rows
+- `bike_day_analytics` contains `731` rows
+- `bike_hourly_demand_summary` contains `24` rows
+- `bike_weekday_weekend_summary` contains `2` rows
+- `bike_daily_trend_summary` contains `731` rows
+- `bike_monthly_trend_summary` contains `24` rows
 
-### 5. Preview transformed data
+For the weather summary table, the exact row count depends on how many weather categories are present in the dataset. You can inspect it with:
 
 ```bash
-docker compose exec db psql -U deng -d deng -c "SELECT dteday, cnt, total_rentals, is_weekend, casual_share, registered_share FROM bike_day_analytics LIMIT 5;"
+docker compose exec postgres psql -U deng -d deng -c "SELECT * FROM bike_weather_demand_summary ORDER BY weather_situation;"
 ```
 
-### 6. Verify with pgAdmin
+### 5. Verify with pgAdmin
 
 Open in your browser:
 
@@ -167,63 +154,64 @@ http://localhost:5050
 
 Log in with:
 
-* Email: `admin@local.dev`
-* Password: `admin`
+- Email: `admin@local.dev`
+- Password: `admin`
 
 Add a new server with:
 
 General tab:
 
-* Name: `deng`
+- Name: `deng`
 
 Connection tab:
 
-* Host name/address: `db`
-* Port: `5432`
-* Maintenance database: `deng`
-* Username: `deng`
-* Password: `deng_dev_password`
+- Host name/address: `postgres`
+- Port: `5432`
+- Maintenance database: `deng`
+- Username: `deng`
+- Password: `deng_dev_password`
 
 After connecting, open:
 
 `Servers -> deng -> Databases -> deng -> Schemas -> public -> Tables`
 
-You should see:
+You should see the project tables listed above.
 
-* `bike_hour_raw`
-* `bike_day_raw`
-* `bike_day_analytics`
+## Verify orchestration requirements
 
-### 7. Verify Kestra
+### Scheduled runs
 
-Open in your browser:
+The DAG is scheduled with `@daily`.
 
-```text
-http://localhost:8081
+### Future runs
+
+Future runs can be triggered manually from the Airflow UI or with:
+
+```bash
+docker compose exec airflow-webserver airflow dags trigger bike_sharing_ingestion
 ```
 
-Expected result:
+### Backfills
 
-* the Kestra UI opens
-* the orchestration service is reachable
+Airflow supports backfills for past dates. Example:
 
-## Repository note
-
-The file `.env.example` is included as a template for local Kaggle API token setup.
+```bash
+docker compose exec airflow-webserver airflow dags backfill bike_sharing_ingestion -s 2024-01-01 -e 2024-01-03
+```
 
 ## Reproducibility summary
 
-This repository contains all components required to reproduce the local environment:
+This repository contains the components required to reproduce the local environment:
 
-* application source code
-* Docker Compose configuration
-* Dockerfile
-* Kestra flow definition
-* setup and verification documentation
+- application source code
+- Docker Compose configuration
+- Airflow DAG definition
+- setup and verification documentation
 
 To reproduce the environment independently:
 
 1. clone the repository
 2. create `.env` from `.env.example` if Kaggle authentication is required
-3. run `docker compose up --build`
-4. verify the services and database state using the commands and screenshots above
+3. run `docker compose up -d`
+4. trigger the DAG in Airflow
+5. verify the services and database state using the commands above

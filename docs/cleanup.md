@@ -3,23 +3,18 @@
 Remove everything created by this project:
 
 ```bash
-docker compose down --volumes --rmi local --remove-orphans
+docker compose down --remove-orphans
 ```
 
 ## What this removes
 
 - containers from this Compose project
-- networks created for this Compose project
-- named volumes from this Compose project, including `pgdata`
-- the local image built for the `app` service
-- orphaned containers belonging to this Compose project
+- the network created for this Compose project
+- the PostgreSQL data stored in the container
+- the Airflow metadata stored in the PostgreSQL container
 
 ## Result
 
-Because the PostgreSQL volume is removed, this also deletes all generated database tables, including:
+This removes the local pipeline environment and the generated database contents.
 
-- raw tables
-- analytics tables
-- summary tables
-
-The next `docker compose up --build` run starts from a clean state.
+The next `docker compose up -d` run starts the services again from a clean state.
