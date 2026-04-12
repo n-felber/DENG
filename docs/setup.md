@@ -12,6 +12,8 @@ This project uses a public Kaggle dataset. In some environments, the dataset dow
 
 ## Kaggle API Token
 
+For the official Kaggle API documentation, including authentication details and usage, see the Kaggle Public API docs: https://www.kaggle.com/docs/api.
+
 This project downloads a dataset from Kaggle.  
 To access the dataset, you may need a personal Kaggle API token.
 
@@ -77,6 +79,8 @@ Open in your browser:
 ```text
 http://localhost:8080
 ```
+
+If http://localhost:8080 is not available yet, Airflow may still be starting up, so wait a few minutes and then try again.
 
 Log in with:
 
