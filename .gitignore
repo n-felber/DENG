@@ -33,3 +33,11 @@ gcp/service-account.json
 
 # Terraform Treiber ignorieren
 terraform/.terraform/
+# GCP local credentials
+gcp/*.json
+
+# Terraform local files
+terraform/.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars

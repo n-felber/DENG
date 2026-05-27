@@ -51,7 +51,7 @@ services:
     <<: *airflow-common
     command: >
       bash -c "pip install --no-cache-dir -r /opt/airflow/requirements.txt &&
-               airflow db upgrade &&
+               airflow db migrate &&
                airflow users create --username airflow --password airflow --firstname Admin --lastname Admin --role Admin --email admin@example.com || true &&
                airflow webserver"
     ports:
@@ -61,5 +61,5 @@ services:
     <<: *airflow-common
     command: >
       bash -c "pip install --no-cache-dir -r /opt/airflow/requirements.txt &&
-               airflow db upgrade &&
+               airflow db migrate &&
                airflow scheduler"
