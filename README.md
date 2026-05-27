@@ -33,6 +33,68 @@ If Kaggle authentication is required in your environment, create a local `.env` 
 KAGGLE_API_TOKEN=your_kaggle_api_token_here
 ```
 
+
+## Common commands
+
+This project includes a `Makefile` with common commands for running, validating, and cleaning the project.
+
+Show available commands:
+
+```bash
+make help
+```
+
+Start the local environment:
+
+```bash
+make up
+```
+
+Check running services:
+
+```bash
+make ps
+```
+
+Trigger the local PostgreSQL pipeline:
+
+```bash
+make trigger-local
+```
+
+Trigger the cloud GCS + BigQuery pipeline:
+
+```bash
+make trigger-cloud
+```
+
+Validate the cloud BigQuery configuration without loading data:
+
+```bash
+make test-cloud-config
+```
+
+Verify local PostgreSQL tables:
+
+```bash
+make verify-local
+```
+
+Clean local generated resources:
+
+```bash
+make cleanup
+```
+
+Destroy cloud infrastructure and clean local generated resources:
+
+```bash
+make cleanup-all
+```
+
+See [docs/cleanup.md](docs/cleanup.md) before running full cleanup.
+
+
 ## Build and run the system
 
 Start all services:
