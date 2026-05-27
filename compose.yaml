@@ -17,6 +17,7 @@ x-airflow-common: &airflow-common
   volumes:
     - ./dags:/opt/airflow/dags
     - ./src:/opt/airflow/src
+    - ./sql:/opt/airflow/sql
     - ./requirements.txt:/opt/airflow/requirements.txt
     - ./gcp:/opt/airflow/gcp  # <-- DER GEHEIME GCP-ORDNER WIRD HIER REINGESPIEGELT
   user: "${AIRFLOW_UID:-50000}:0"
