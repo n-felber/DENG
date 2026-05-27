@@ -1,0 +1,4 @@
+gcp_project_id  = "deng-team2-bike-sharing"
+gcp_region      = "europe-west6"
+gcs_bucket_name = "deng-team2-bike-sharing-data-lake"
+bq_dataset_name = "bike_sharing"

@@ -27,3 +27,9 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Geheimer Google Cloud Key
+gcp/service-account.json
+
+# Terraform Treiber ignorieren
+terraform/.terraform/

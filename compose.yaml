@@ -7,10 +7,17 @@ x-airflow-common: &airflow-common
     - AIRFLOW__CORE__LOAD_EXAMPLES=${AIRFLOW__CORE__LOAD_EXAMPLES}
     - AIRFLOW__CORE__EXECUTOR=LocalExecutor
     - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
+    # --- NEUE CLOUD UMGEBUNGSVARIABLEN (PERSON 1) ---
+    - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+    - GCP_REGION=${GCP_REGION}
+    - GCS_BUCKET_NAME=${GCS_BUCKET_NAME}
+    - BQ_DATASET=${BQ_DATASET}
+    - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
   volumes:
     - ./dags:/opt/airflow/dags
     - ./src:/opt/airflow/src
     - ./requirements.txt:/opt/airflow/requirements.txt
+    - ./gcp:/opt/airflow/gcp  # <-- DER GEHEIME GCP-ORDNER WIRD HIER REINGESPIEGELT
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     postgres:

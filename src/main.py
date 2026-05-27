@@ -23,7 +23,6 @@ import time
 
 import kagglehub
 import pandas as pd
-from kagglehub import KaggleDatasetAdapter
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
@@ -62,14 +61,6 @@ logger = logging.getLogger(__name__)
 def validate_environment() -> None:
     """
     Validate the required runtime configuration.
-
-    This pipeline strictly requires:
-    - DATABASE_URL
-
-    Kaggle authentication is not always required for public datasets,
-    so the pipeline does not fail early if KAGGLE_API_TOKEN is missing.
-    Instead, it will try the download first and raise a clear error
-    message only if Kaggle rejects the request.
     """
     if not DATABASE_URL:
         raise RuntimeError(
@@ -89,9 +80,6 @@ def validate_environment() -> None:
 def create_db_engine() -> Engine:
     """
     Create a SQLAlchemy engine for the configured PostgreSQL database.
-
-    Returns:
-        Engine: SQLAlchemy engine instance.
     """
     return create_engine(DATABASE_URL)
 
@@ -103,14 +91,6 @@ def wait_for_db(
 ) -> None:
     """
     Wait until the PostgreSQL database is available.
-
-    Args:
-        engine: SQLAlchemy engine connected to PostgreSQL.
-        retries: Maximum number of connection attempts.
-        delay_seconds: Delay between retries in seconds.
-
-    Raises:
-        Exception: Re-raises the last connection error if all retries fail.
     """
     for attempt in range(1, retries + 1):
         try:
@@ -133,24 +113,23 @@ def wait_for_db(
 def download_dataset_file(file_name: str) -> pd.DataFrame:
     """
     Download a single CSV file from the Kaggle dataset into a pandas DataFrame.
-
-    Args:
-        file_name: Name of the file inside the dataset repository.
-
-    Returns:
-        pd.DataFrame: Loaded DataFrame.
-
-    Raises:
-        RuntimeError: If the file is empty or if Kaggle access fails.
+    Kompatibel mit kagglehub v0.3.3.
     """
     logger.info("Downloading source file '%s' from Kaggle...", file_name)
 
     try:
-        df = kagglehub.dataset_load(
-            KaggleDatasetAdapter.PANDAS,
-            DATASET_HANDLE,
-            file_name,
-        )
+        # Klassischer Download-Weg, der in v0.3.3 stabil funktioniert
+        downloaded_path = kagglehub.dataset_download(DATASET_HANDLE, file_name)
+        
+        # Falls ein Verzeichnis zurückgegeben wird, hängen wir den Dateinamen an
+        if os.path.isdir(downloaded_path):
+            file_path = os.path.join(downloaded_path, file_name)
+        else:
+            file_path = downloaded_path
+            
+        # Manuelles Einlesen via Pandas
+        df = pd.read_csv(file_path)
+        
     except Exception as exc:
         raise RuntimeError(
             "Failed to download the Kaggle dataset file. "
@@ -175,10 +154,6 @@ def download_dataset_file(file_name: str) -> pd.DataFrame:
 def log_dataframe_overview(table_name: str, df: pd.DataFrame) -> None:
     """
     Log a compact overview of a DataFrame before writing it to PostgreSQL.
-
-    Args:
-        table_name: Name of the target database table.
-        df: DataFrame to be loaded.
     """
     logger.info("Preparing table '%s'.", table_name)
     logger.info("Columns for '%s': %s", table_name, list(df.columns))
@@ -193,15 +168,6 @@ def load_dataframe_to_postgres(
 ) -> None:
     """
     Load a DataFrame into PostgreSQL.
-
-    Each run replaces the target table so that the batch pipeline produces
-    a fresh raw layer from the source files.
-
-    Args:
-        engine: SQLAlchemy engine connected to PostgreSQL.
-        df: DataFrame to load.
-        table_name: Target PostgreSQL table name.
-        chunk_size: Number of rows per batch insert.
     """
     logger.info("Loading '%s' into PostgreSQL...", table_name)
 
@@ -221,10 +187,6 @@ def load_dataframe_to_postgres(
 def verify_table_row_count(engine: Engine, table_name: str) -> None:
     """
     Verify that a target table exists and log its row count.
-
-    Args:
-        engine: SQLAlchemy engine connected to PostgreSQL.
-        table_name: Name of the table to check.
     """
     query = text(f"SELECT COUNT(*) FROM {table_name}")
 
@@ -238,7 +200,6 @@ def transform_bike_day(engine: Engine) -> None:
     """
     Create an analytics-ready version of the daily bike dataset.
     """
-
     logger.info("Starting transformation for bike_day...")
 
     query = """
@@ -295,7 +256,6 @@ def transform_bike_hour(engine: Engine) -> None:
     """
     Create an analytics-ready version of the hourly bike dataset.
     """
-
     logger.info("Starting transformation for bike_hour...")
 
     query = """
@@ -354,7 +314,6 @@ def create_summary_tables(engine: Engine) -> None:
     """
     Create aggregated summary tables for recurring analytics questions.
     """
-
     logger.info("Starting creation of summary tables...")
 
     summary_queries = {
@@ -441,14 +400,6 @@ def create_summary_tables(engine: Engine) -> None:
 def run_batch_ingestion() -> None:
     """
     Run the full batch ingestion process.
-
-    Steps:
-    1. Validate runtime configuration
-    2. Wait for PostgreSQL
-    3. Download each source file from Kaggle
-    4. Load raw tables into PostgreSQL
-    5. Verify row counts
-    6. Create transformed analytics tables and summaries
     """
     logger.info("--- Starting batch ingestion pipeline ---")
 
