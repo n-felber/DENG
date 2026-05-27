@@ -1,6 +1,7 @@
 x-airflow-common: &airflow-common
   image: apache/airflow:2.7.1-python3.11
   environment:
+    - PYTHONPATH=/opt/airflow/src
     - DATABASE_URL=${DATABASE_URL}
     - KAGGLE_API_TOKEN=${KAGGLE_API_TOKEN}
     - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}

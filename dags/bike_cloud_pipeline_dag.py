@@ -10,6 +10,7 @@ from airflow.operators.python import PythonOperator
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
+from cloud_ingestion import upload_kaggle_to_gcs
 from bigquery_pipeline import run_pipeline
 
 
@@ -27,10 +28,10 @@ default_args = {
 with DAG(
     dag_id="bike_sharing_cloud_pipeline",
     default_args=default_args,
-    description="Load raw bike sharing files from GCS into BigQuery and create analytics tables",
+    description="Upload Bike Sharing raw files to GCS, then load and transform them in BigQuery",
     schedule_interval="@daily",
     catchup=False,
-    tags=["bike-sharing", "bigquery", "cloud"],
+    tags=["bike-sharing", "gcs", "bigquery", "cloud"],
 ) as dag:
 
     validate_bigquery_pipeline_config = PythonOperator(
@@ -39,10 +40,15 @@ with DAG(
         op_kwargs={"dry_run": True},
     )
 
+    upload_raw_files_to_gcs = PythonOperator(
+        task_id="upload_raw_files_to_gcs",
+        python_callable=upload_kaggle_to_gcs,
+    )
+
     run_bigquery_pipeline = PythonOperator(
         task_id="run_bigquery_pipeline",
         python_callable=run_pipeline,
         op_kwargs={"dry_run": False},
     )
 
-    validate_bigquery_pipeline_config >> run_bigquery_pipeline
+    validate_bigquery_pipeline_config >> upload_raw_files_to_gcs >> run_bigquery_pipeline
