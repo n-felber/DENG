@@ -1,50 +1,204 @@
 # DENG
 
-## Project Overview
+End-to-end batch data pipeline for the Bike Sharing dataset.
 
-This project implements a local batch data pipeline for the Bike Sharing dataset.
+## Start here
 
-It includes:
-- a Python batch ingestion pipeline
-- a local PostgreSQL database
-- pgAdmin for database inspection
-- Airflow for workflow orchestration
+To set up, run, and verify the project, follow the setup guide:
+
+[docs/setup.md](docs/setup.md)
+
+The setup guide includes:
+
+* prerequisites
+* local Docker setup
+* Airflow usage
+* PostgreSQL and pgAdmin verification
+* Terraform setup
+* Google Cloud Storage verification
+* BigQuery verification
+* troubleshooting
+
+Cleanup instructions are documented separately:
+
+[docs/cleanup.md](docs/cleanup.md)
+
+Read the cleanup guide before running destructive cleanup commands, especially `make cleanup-all`.
+
+## Project overview
+
+This project implements a reproducible batch data pipeline for bike-sharing demand analytics.
+
+The pipeline ingests the Bike Sharing dataset, stores raw data, creates analytics-ready tables, and produces summary tables that support demand analysis questions such as:
+
+* At which hours is rental demand highest?
+* How does demand differ between weekdays and weekends?
+* How does weather affect bike usage?
+* How do casual and registered users differ in behavior?
+* Which periods require better bike availability and redistribution planning?
+
+The detailed use case is documented here:
+
+[docs/use_case.md](docs/use_case.md)
+
+## Pipeline architecture
+
+The project contains two runnable pipeline paths.
+
+### Local pipeline
+
+```text
+Kaggle dataset
+   |
+   v
+Airflow
+   |
+   v
+PostgreSQL
+   |
+   v
+Analytics and summary tables
+```
+
+The local pipeline uses:
+
+* Kaggle as the source dataset
+* Python for batch ingestion
+* PostgreSQL for local storage
+* pgAdmin for inspection
+* Airflow for orchestration
+* Docker Compose for reproducibility
+
+### Cloud pipeline
+
+```text
+Kaggle dataset
+   |
+   v
+Airflow
+   |
+   v
+Google Cloud Storage
+   |
+   v
+BigQuery raw tables
+   |
+   v
+BigQuery analytics and summary tables
+```
+
+The cloud pipeline uses:
+
+* Terraform for cloud infrastructure
+* Google Cloud Storage as the data lake
+* BigQuery as the data warehouse
+* Airflow for orchestration
+* SQL transformations for analytics-ready outputs
 
 ## Documentation
 
-- Use case: [docs/use_case.md](docs/use_case.md)
-- Ingestion pipeline: [docs/ingestion.md](docs/ingestion.md)
-- Setup: [docs/setup.md](docs/setup.md)
-- Cleanup: [docs/cleanup.md](docs/cleanup.md)
+| Document                               | Purpose                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------ |
+| [docs/setup.md](docs/setup.md)         | Full setup, run, and verification guide                                  |
+| [docs/use_case.md](docs/use_case.md)   | Dataset, user persona, analytics use case, and transformation motivation |
+| [docs/ingestion.md](docs/ingestion.md) | Local batch ingestion pipeline details                                   |
+| [docs/cleanup.md](docs/cleanup.md)     | Local, cloud, and secrets cleanup instructions                           |
 
-## Prerequisites
+## Repository structure
 
-Make sure these are installed:
-
-- [Docker](https://www.docker.com/)
-
-## Kaggle authentication
-
-This project uses a public Kaggle dataset. In some environments, the dataset download may work without explicit authentication.
-
-If Kaggle authentication is required in your environment, create a local `.env` file based on `.env.example` and set:
-
-```env
-KAGGLE_API_TOKEN=your_kaggle_api_token_here
+```text
+.
+├── dags/                  # Airflow DAG definitions
+├── docs/                  # Project documentation
+├── gcp/                   # Local service account key location, not committed
+├── sql/                   # BigQuery transformation SQL files
+├── src/                   # Python pipeline source code
+├── terraform/             # Terraform cloud infrastructure
+├── compose.yaml           # Docker Compose services
+├── Dockerfile             # Pipeline container image
+├── Makefile               # Common run, verify, Terraform, and cleanup commands
+├── requirements.txt       # Python dependencies
+└── README.md              # Project entry point
 ```
 
+## Main components
+
+### Source dataset
+
+The project uses the Kaggle Bike Sharing dataset:
+
+```text
+lakshmi25npathi/bike-sharing-dataset
+```
+
+Input files:
+
+```text
+hour.csv
+day.csv
+```
+
+### Local storage
+
+The local pipeline stores raw, transformed, and summary data in PostgreSQL.
+
+Main local tables:
+
+```text
+bike_hour_raw
+bike_day_raw
+bike_hour_analytics
+bike_day_analytics
+bike_hourly_demand_summary
+bike_weekday_weekend_summary
+bike_weather_demand_summary
+bike_daily_trend_summary
+bike_monthly_trend_summary
+```
+
+### Cloud storage and warehouse
+
+The cloud pipeline stores raw files in Google Cloud Storage and loads transformed outputs into BigQuery.
+
+Default cloud values:
+
+```text
+GCP project ID: deng-team2-bike-sharing
+GCP region: europe-west6
+GCS bucket: deng-team2-bike-sharing-data-lake
+BigQuery dataset: bike_sharing
+```
+
+Expected GCS paths:
+
+```text
+gs://deng-team2-bike-sharing-data-lake/raw/bike_sharing/hour.csv
+gs://deng-team2-bike-sharing-data-lake/raw/bike_sharing/day.csv
+```
+
+Expected BigQuery tables:
+
+```text
+bike_sharing.bike_hour_raw
+bike_sharing.bike_day_raw
+bike_sharing.bike_hour_analytics
+bike_sharing.bike_day_analytics
+bike_sharing.bike_hourly_demand_summary
+bike_sharing.bike_weekday_weekend_summary
+bike_sharing.bike_weather_demand_summary
+bike_sharing.bike_daily_trend_summary
+bike_sharing.bike_monthly_trend_summary
+```
 
 ## Common commands
 
-This project includes a `Makefile` with common commands for running, validating, and cleaning the project.
-
-Show available commands:
+Show all available commands:
 
 ```bash
 make help
 ```
 
-Start the local environment:
+Start the local Docker environment:
 
 ```bash
 make up
@@ -62,16 +216,16 @@ Trigger the local PostgreSQL pipeline:
 make trigger-local
 ```
 
-Trigger the cloud GCS + BigQuery pipeline:
-
-```bash
-make trigger-cloud
-```
-
-Validate the cloud BigQuery configuration without loading data:
+Validate the cloud pipeline configuration without loading data:
 
 ```bash
 make test-cloud-config
+```
+
+Trigger the cloud GCS and BigQuery pipeline:
+
+```bash
+make trigger-cloud
 ```
 
 Verify local PostgreSQL tables:
@@ -80,200 +234,71 @@ Verify local PostgreSQL tables:
 make verify-local
 ```
 
-Clean local generated resources:
+Check local PostgreSQL row counts:
+
+```bash
+make verify-local-counts
+```
+
+Check BigQuery row counts:
+
+```bash
+make verify-cloud-counts
+```
+
+Run local cleanup:
 
 ```bash
 make cleanup
 ```
 
-Destroy cloud infrastructure and clean local generated resources:
+Destroy cloud infrastructure and clean local generated files:
 
 ```bash
 make cleanup-all
 ```
 
-See [docs/cleanup.md](docs/cleanup.md) before running full cleanup.
+## Reproducibility
 
+The project is designed to be reproducible from the repository using Docker Compose and documented setup steps.
 
-## Build and run the system
+A reviewer should start with:
 
-Start all services:
+[docs/setup.md](docs/setup.md)
 
-```bash
-docker compose up -d
-```
-
-This starts:
-
-- PostgreSQL
-- pgAdmin
-- Airflow webserver
-- Airflow scheduler
-
-All services run inside the same Docker Compose network and can communicate using their service names, such as `postgres`.
-
-## Airflow UI
-
-Open in your browser:
-
-```text
-http://localhost:8080
-```
-
-Log in with:
-
-- Username: `airflow`
-- Password: `airflow`
-
-The DAG `bike_sharing_ingestion` should be visible in the Airflow UI.
-
-To run the pipeline immediately, trigger the DAG once from the Airflow UI or with:
-
-```bash
-docker compose exec airflow-webserver airflow dags trigger bike_sharing_ingestion
-```
-
-## Verify that it works
-
-### 1. Check container status
-
-```bash
-docker compose ps
-```
-
-Expected result:
-
-- `postgres` is `Up` and healthy
-- `pgadmin` is `Up`
-- `airflow-webserver` is `Up`
-- `airflow-scheduler` is `Up`
-
-### 2. Verify the DAG run in Airflow
-
-In the Airflow UI:
-
-- confirm that the DAG `bike_sharing_ingestion` exists
-- trigger the DAG once if no recent run is present
-- confirm that the task `run_batch_ingestion_task` finishes successfully
-
-### 3. Check PostgreSQL tables
-
-Airflow stores its own metadata tables in the same PostgreSQL database. To inspect only the project tables, run:
-
-```bash
-docker compose exec postgres psql -U deng -d deng -c "\dt public.bike_*"
-```
-
-Expected tables:
-
-- `bike_hour_raw`
-- `bike_day_raw`
-- `bike_hour_analytics`
-- `bike_day_analytics`
-- `bike_hourly_demand_summary`
-- `bike_weekday_weekend_summary`
-- `bike_weather_demand_summary`
-- `bike_daily_trend_summary`
-- `bike_monthly_trend_summary`
-
-### 4. Check row counts
-
-```bash
-docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hour_raw;"
-docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_day_raw;"
-docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hour_analytics;"
-docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_day_analytics;"
-docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_hourly_demand_summary;"
-docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_weekday_weekend_summary;"
-docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_daily_trend_summary;"
-docker compose exec postgres psql -U deng -d deng -c "SELECT COUNT(*) FROM bike_monthly_trend_summary;"
-```
-
-Expected result:
-
-- `bike_hour_raw` contains `17379` rows
-- `bike_day_raw` contains `731` rows
-- `bike_hour_analytics` contains `17379` rows
-- `bike_day_analytics` contains `731` rows
-- `bike_hourly_demand_summary` contains `24` rows
-- `bike_weekday_weekend_summary` contains `2` rows
-- `bike_daily_trend_summary` contains `731` rows
-- `bike_monthly_trend_summary` contains `24` rows
-
-For the weather summary table, the exact row count depends on how many weather categories are present in the dataset. You can inspect it with:
-
-```bash
-docker compose exec postgres psql -U deng -d deng -c "SELECT * FROM bike_weather_demand_summary ORDER BY weather_situation;"
-```
-
-### 5. Verify with pgAdmin
-
-Open in your browser:
-
-```text
-http://localhost:5050
-```
-
-Log in with:
-
-- Email: `admin@local.dev`
-- Password: `admin`
-
-Add a new server with:
-
-General tab:
-
-- Name: `deng`
-
-Connection tab:
-
-- Host name/address: `postgres`
-- Port: `5432`
-- Maintenance database: `deng`
-- Username: `deng`
-- Password: `deng_dev_password`
-
-After connecting, open:
-
-`Servers -> deng -> Databases -> deng -> Schemas -> public -> Tables`
-
-You should see the project tables listed above.
-
-## Verify orchestration requirements
-
-### Scheduled runs
-
-The DAG is scheduled with `@daily`.
-
-### Future runs
-
-Future runs can be triggered manually from the Airflow UI or with:
-
-```bash
-docker compose exec airflow-webserver airflow dags trigger bike_sharing_ingestion
-```
-
-### Backfills
-
-Airflow supports backfills for past dates. Example:
-
-```bash
-docker compose exec airflow-webserver airflow dags backfill bike_sharing_ingestion -s 2024-01-01 -e 2024-01-03
-```
-
-## Reproducibility summary
-
-This repository contains the components required to reproduce the local environment:
-
-- application source code
-- Docker Compose configuration
-- Airflow DAG definition
-- setup and verification documentation
-
-To reproduce the environment independently:
+The setup guide explains how to:
 
 1. clone the repository
-2. create `.env` from `.env.example` if Kaggle authentication is required
-3. run `docker compose up -d`
-4. trigger the DAG in Airflow
-5. verify the services and database state using the commands above
+2. configure local environment variables
+3. start the Docker Compose services
+4. run the local Airflow pipeline
+5. verify PostgreSQL outputs
+6. provision cloud infrastructure with Terraform
+7. run the cloud Airflow pipeline
+8. verify GCS and BigQuery outputs
+
+## Cleanup warning
+
+Some cleanup commands delete generated data.
+
+Use:
+
+```bash
+make cleanup
+```
+
+to remove local runtime resources.
+
+Use:
+
+```bash
+make cleanup-all
+```
+
+only when the project is finished and cloud resources can be destroyed.
+
+Before full cleanup, collect screenshots or other required evidence for the project submission.
+
+See the full cleanup guide:
+
+[docs/cleanup.md](docs/cleanup.md)

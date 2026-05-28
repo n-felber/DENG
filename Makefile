@@ -3,11 +3,15 @@ SHELL := /bin/bash
 COMPOSE := docker compose
 TF := terraform -chdir=terraform
 
+BQ_PROJECT_ID := deng-team2-bike-sharing
+BQ_DATASET := bike_sharing
+
 LOCAL_DAG := bike_sharing_ingestion
 CLOUD_DAG := bike_sharing_cloud_pipeline
 
 .PHONY: help up down ps logs restart \
-	trigger-local trigger-cloud test-cloud-config verify-local \
+	trigger-local trigger-cloud test-cloud-config verify-local verify-local-counts verify-local-weather \
+	verify-cloud-counts verify-cloud-weather \
 	terraform-init terraform-plan terraform-apply terraform-destroy \
 	cleanup cleanup-local cleanup-python cleanup-terraform-local cleanup-all cleanup-secrets
 
@@ -42,6 +46,66 @@ test-cloud-config: ## Validate cloud pipeline configuration without loading data
 
 verify-local: ## List local PostgreSQL project tables
 	$(COMPOSE) exec postgres psql -U deng -d deng -c "\dt public.bike_*"
+
+verify-local-counts: ## Show row counts for local PostgreSQL project tables
+	$(COMPOSE) exec postgres psql -U deng -d deng -c "\
+	SELECT 'bike_hour_raw' AS table_name, COUNT(*) AS row_count FROM bike_hour_raw \
+	UNION ALL \
+	SELECT 'bike_day_raw', COUNT(*) FROM bike_day_raw \
+	UNION ALL \
+	SELECT 'bike_hour_analytics', COUNT(*) FROM bike_hour_analytics \
+	UNION ALL \
+	SELECT 'bike_day_analytics', COUNT(*) FROM bike_day_analytics \
+	UNION ALL \
+	SELECT 'bike_hourly_demand_summary', COUNT(*) FROM bike_hourly_demand_summary \
+	UNION ALL \
+	SELECT 'bike_weekday_weekend_summary', COUNT(*) FROM bike_weekday_weekend_summary \
+	UNION ALL \
+	SELECT 'bike_daily_trend_summary', COUNT(*) FROM bike_daily_trend_summary \
+	UNION ALL \
+	SELECT 'bike_monthly_trend_summary', COUNT(*) FROM bike_monthly_trend_summary; \
+	"
+
+verify-local-weather: ## Show local PostgreSQL weather demand summary
+	$(COMPOSE) exec postgres psql -U deng -d deng -c "\
+	SELECT * \
+	FROM bike_weather_demand_summary \
+	ORDER BY weather_situation; \
+	"
+
+verify-cloud-counts: ## Show row counts for BigQuery project tables
+	bq query --use_legacy_sql=false '\
+	SELECT "bike_hour_raw" AS table_name, COUNT(*) AS row_count \
+	FROM `$(BQ_PROJECT_ID).$(BQ_DATASET).bike_hour_raw` \
+	UNION ALL \
+	SELECT "bike_day_raw", COUNT(*) \
+	FROM `$(BQ_PROJECT_ID).$(BQ_DATASET).bike_day_raw` \
+	UNION ALL \
+	SELECT "bike_hour_analytics", COUNT(*) \
+	FROM `$(BQ_PROJECT_ID).$(BQ_DATASET).bike_hour_analytics` \
+	UNION ALL \
+	SELECT "bike_day_analytics", COUNT(*) \
+	FROM `$(BQ_PROJECT_ID).$(BQ_DATASET).bike_day_analytics` \
+	UNION ALL \
+	SELECT "bike_hourly_demand_summary", COUNT(*) \
+	FROM `$(BQ_PROJECT_ID).$(BQ_DATASET).bike_hourly_demand_summary` \
+	UNION ALL \
+	SELECT "bike_weekday_weekend_summary", COUNT(*) \
+	FROM `$(BQ_PROJECT_ID).$(BQ_DATASET).bike_weekday_weekend_summary` \
+	UNION ALL \
+	SELECT "bike_daily_trend_summary", COUNT(*) \
+	FROM `$(BQ_PROJECT_ID).$(BQ_DATASET).bike_daily_trend_summary` \
+	UNION ALL \
+	SELECT "bike_monthly_trend_summary", COUNT(*) \
+	FROM `$(BQ_PROJECT_ID).$(BQ_DATASET).bike_monthly_trend_summary`; \
+	'
+
+verify-cloud-weather: ## Show BigQuery weather demand summary
+	bq query --use_legacy_sql=false '\
+	SELECT * \
+	FROM `$(BQ_PROJECT_ID).$(BQ_DATASET).bike_weather_demand_summary` \
+	ORDER BY weather_situation; \
+	'
 
 terraform-init: ## Initialize Terraform
 	$(TF) init
