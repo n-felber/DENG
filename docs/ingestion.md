@@ -1,153 +1,237 @@
 # Ingestion Pipeline
 
-## Purpose
+This project contains two batch ingestion paths:
 
-This project includes a **batch ingestion pipeline** that downloads the Bike Sharing dataset from Kaggle, loads the raw source data into PostgreSQL, and creates analytics-ready transformed and summary tables.
+1. Local ingestion into PostgreSQL
+2. Cloud ingestion into Google Cloud Storage and BigQuery
 
-The ingestion script is located at:
+Both paths use the Kaggle Bike Sharing dataset.
 
-```bash
-src/main.py
+Dataset:
+
+```text
+lakshmi25npathi/bike-sharing-dataset
+```
+
+Source files:
+
+```text
+hour.csv
+day.csv
 ```
 
 ---
 
-## Source
+## Local pipeline
 
-Dataset:
+Local source code:
 
-- `lakshmi25npathi/bike-sharing-dataset`
+```text
+src/main.py
+```
 
-Files ingested:
+Airflow DAG:
 
-- `hour.csv`
-- `day.csv`
+```text
+dags/bike_sharing_dag.py
+```
 
-## Target Storage
+DAG ID:
 
-The pipeline writes data into PostgreSQL.
+```text
+bike_sharing_ingestion
+```
+
+The local pipeline runs:
+
+```text
+Kaggle dataset
+  -> Python ingestion
+  -> PostgreSQL raw tables
+  -> PostgreSQL analytics tables
+  -> PostgreSQL summary tables
+```
+
+### Local target tables
 
 Raw tables:
 
-- `bike_hour_raw`
-- `bike_day_raw`
+```text
+bike_hour_raw
+bike_day_raw
+```
 
 Analytics tables:
 
-- `bike_hour_analytics`
-- `bike_day_analytics`
+```text
+bike_hour_analytics
+bike_day_analytics
+```
 
 Summary tables:
 
-- `bike_hourly_demand_summary`
-- `bike_weekday_weekend_summary`
-- `bike_weather_demand_summary`
-- `bike_daily_trend_summary`
-- `bike_monthly_trend_summary`
-
-Each pipeline run replaces the existing raw tables so that the database reflects a fresh batch load from the source dataset.  
-The transformed and summary tables are also recreated on each run.
-
-## Why This Is a Batch Pipeline
-
-This ingestion process is batch-based because it:
-
-- downloads complete source files
-- processes them as full datasets
-- writes them into PostgreSQL in one pipeline run
-
-It does not stream individual records in real time.
-
-## Runtime Configuration
-
-The pipeline requires:
-
-- `DATABASE_URL`
-
-The pipeline may also use:
-
-- `KAGGLE_API_TOKEN`
-
-The dataset is public, so in some environments the download may work without explicit authentication. If Kaggle requires authentication, provide a Kaggle API token through an environment variable.
-
-## Secure Handling of Kaggle Credentials
-
-Kaggle credentials are **not committed** to the repository.
-
-The recommended setup is to provide the token at runtime using an environment variable:
-
-```bash
-export KAGGLE_API_TOKEN='your_real_token_here'
-docker compose up --build
+```text
+bike_hourly_demand_summary
+bike_weekday_weekend_summary
+bike_weather_demand_summary
+bike_daily_trend_summary
+bike_monthly_trend_summary
 ```
 
-A second clean option is to store the token in a local `.env` file that is ignored by Git.
+Each run replaces the existing raw tables and recreates the analytics and summary tables.
 
-Example `.env`:
+---
+
+## Cloud pipeline
+
+Cloud ingestion source code:
+
+```text
+src/cloud_ingestion.py
+```
+
+BigQuery pipeline source code:
+
+```text
+src/bigquery_pipeline.py
+```
+
+Airflow DAG:
+
+```text
+dags/bike_cloud_pipeline_dag.py
+```
+
+DAG ID:
+
+```text
+bike_sharing_cloud_pipeline
+```
+
+The cloud pipeline runs:
+
+```text
+Kaggle dataset
+  -> Google Cloud Storage raw files
+  -> BigQuery raw tables
+  -> BigQuery analytics tables
+  -> BigQuery summary tables
+```
+
+### Cloud raw file paths
+
+```text
+gs://deng-team2-bike-sharing-data-lake/raw/bike_sharing/hour.csv
+gs://deng-team2-bike-sharing-data-lake/raw/bike_sharing/day.csv
+```
+
+### BigQuery target tables
+
+```text
+bike_sharing.bike_hour_raw
+bike_sharing.bike_day_raw
+bike_sharing.bike_hour_analytics
+bike_sharing.bike_day_analytics
+bike_sharing.bike_hourly_demand_summary
+bike_sharing.bike_weekday_weekend_summary
+bike_sharing.bike_weather_demand_summary
+bike_sharing.bike_daily_trend_summary
+bike_sharing.bike_monthly_trend_summary
+```
+
+---
+
+## Runtime configuration
+
+Local pipeline variables:
 
 ```env
-KAGGLE_API_TOKEN=your_real_token_here
+DATABASE_URL=postgresql://deng:deng_dev_password@postgres:5432/deng
+KAGGLE_API_TOKEN=
 ```
 
-Because `.env` is ignored by Git, the token stays local to the developer machine and is not committed to the repository.
+Cloud pipeline variables:
 
-## What the Script Does
+```env
+GCP_PROJECT_ID=deng-team2-bike-sharing
+GCP_REGION=europe-west6
+GCS_BUCKET_NAME=deng-team2-bike-sharing-data-lake
+BQ_DATASET=bike_sharing
+GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/gcp/service-account.json
+```
 
-The script performs the following steps:
+Secrets such as `.env`, `gcp/service-account.json`, and `terraform/terraform.tfvars` must not be committed.
 
-1. Validates required runtime configuration
-2. Waits until PostgreSQL is available
-3. Downloads the source files from Kaggle
-4. Loads the source data into PostgreSQL raw tables
-5. Verifies that the raw tables were written successfully
-6. Creates analytics-ready daily and hourly tables
-7. Creates summary tables for recurring analysis questions
+---
 
-## Implemented Transformation Logic
+## Transformation logic
 
-The transformation layer includes the following types of logic:
+Both local and cloud transformations create analytics-ready fields such as:
 
-- creation of proper date and timestamp fields
-- derived calendar features such as:
-  - `event_date`
-  - `event_timestamp`
-  - `day_name`
-  - `month_name`
-  - `is_weekend`
-- demand-oriented derived metrics such as:
-  - `total_rentals`
-  - `casual_share`
-  - `registered_share`
-- convenience fields for analysis such as:
-  - `weather_situation`
-  - `weather_situation_label`
-  - `humidity`
-  - `hour_of_day`
+```text
+event_date
+event_timestamp
+year
+month
+day_name
+month_name
+is_weekend
+weather_situation
+weather_situation_label
+humidity
+total_rentals
+casual_share
+registered_share
+```
 
-## Summary Outputs
+The summary tables support repeated analysis questions about:
 
-The pipeline also creates summary tables that support recurring business questions:
+* hourly demand
+* weekday vs. weekend demand
+* weather impact
+* daily trends
+* monthly trends
 
-- `bike_hourly_demand_summary` for average rentals by hour of day
-- `bike_weekday_weekend_summary` for weekday vs. weekend demand
-- `bike_weather_demand_summary` for demand by weather situation
-- `bike_daily_trend_summary` for daily rental trends
-- `bike_monthly_trend_summary` for monthly rental trends
+---
 
-## Expected Result
+## BigQuery partitioning and clustering
 
-After a successful pipeline run:
+`bike_hour_analytics`:
 
-- PostgreSQL contains the raw tables `bike_hour_raw` and `bike_day_raw`
-- PostgreSQL contains the analytics tables `bike_hour_analytics` and `bike_day_analytics`
-- PostgreSQL contains the summary tables:
-  - `bike_hourly_demand_summary`
-  - `bike_weekday_weekend_summary`
-  - `bike_weather_demand_summary`
-  - `bike_daily_trend_summary`
-  - `bike_monthly_trend_summary`
-- all tables are queryable
-- the row counts for raw and transformed tables are logged in the pipeline output
-- the transformed and summary tables can be inspected through SQL or pgAdmin
+```text
+Partition: DATE(event_timestamp)
+Cluster: hour_of_day, is_weekend, weather_situation
+```
 
-This raw, transformed, and summarized layer is the input for the later analysis and orchestration parts of the project.
+`bike_day_analytics`:
+
+```text
+Partition: event_date
+Cluster: is_weekend, weather_situation
+```
+
+This matches the main use case queries around time, weekend behavior, and weather effects.
+
+---
+
+## Verification commands
+
+Local:
+
+```bash
+make trigger-local
+make verify-local
+make verify-local-counts
+make verify-local-weather
+```
+
+Cloud:
+
+```bash
+make test-cloud-config
+make trigger-cloud
+gcloud storage ls gs://deng-team2-bike-sharing-data-lake/raw/bike_sharing/
+bq ls deng-team2-bike-sharing:bike_sharing
+make verify-cloud-counts
+make verify-cloud-weather
+```
